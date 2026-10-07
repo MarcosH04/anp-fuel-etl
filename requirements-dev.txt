@@ -1,0 +1,4 @@
+# Para desenvolver no seu PC (fora do Docker) e para o GitHub Actions.
+-r requirements.txt
+pytest>=8
+ruff>=0.5

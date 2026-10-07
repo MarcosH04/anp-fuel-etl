@@ -1,0 +1,112 @@
+# Ambiente local completo: Airflow (UI + agendador) e dois bancos PostgreSQL.
+#
+#   airflow-db    -> banco interno do Airflow (guarda histórico de execuções)
+#   warehouse-db  -> o seu data warehouse (onde os dados da ANP ficam)
+#   airflow-init  -> roda uma vez: cria as tabelas internas e o usuário admin
+#   webserver     -> interface web em http://localhost:8080
+#   scheduler     -> quem dispara e acompanha as tarefas
+
+x-airflow-common: &airflow-common
+  build: .
+  image: anp-fuel-etl-airflow:latest
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD:-airflow}@airflow-db/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-troque-esta-chave}
+    # Variáveis lidas pelo nosso código (anp_etl/config.py)
+    ANP_DATA_DIR: /opt/airflow/data
+    ANP_SQL_DIR: /opt/airflow/sql
+    WAREHOUSE_HOST: warehouse-db
+    WAREHOUSE_PORT: "5432"
+    WAREHOUSE_DB: ${WAREHOUSE_DB:-anp}
+    WAREHOUSE_USER: ${WAREHOUSE_USER:-warehouse}
+    WAREHOUSE_PASSWORD: ${WAREHOUSE_PASSWORD:-warehouse}
+  volumes:
+    - ./dags:/opt/airflow/dags:ro
+    - ./src:/opt/airflow/src:ro
+    - ./sql:/opt/airflow/sql:ro
+    - anp_data:/opt/airflow/data
+    - airflow_logs:/opt/airflow/logs
+  depends_on: &airflow-depends-on
+    airflow-db:
+      condition: service_healthy
+    warehouse-db:
+      condition: service_healthy
+
+services:
+  airflow-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD:-airflow}
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  warehouse-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${WAREHOUSE_USER:-warehouse}
+      POSTGRES_PASSWORD: ${WAREHOUSE_PASSWORD:-warehouse}
+      POSTGRES_DB: ${WAREHOUSE_DB:-anp}
+    ports:
+      # 5433 no seu PC (para não colidir com um PostgreSQL já instalado); 5432 dentro do Docker
+      - "${WAREHOUSE_PORT_HOST:-5433}:5432"
+    volumes:
+      - warehouse_data:/var/lib/postgresql/data
+      # Scripts .sql desta pasta rodam automaticamente na primeira criação do banco
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  airflow-init:
+    <<: *airflow-common
+    command: >
+      bash -c "airflow db migrate &&
+      (airflow users create
+        --username ${AIRFLOW_ADMIN_USER:-airflow}
+        --password ${AIRFLOW_ADMIN_PASSWORD:-airflow}
+        --firstname Admin --lastname User --role Admin
+        --email admin@example.com || true)"
+    restart: "no"
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    depends_on:
+      <<: *airflow-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    depends_on:
+      <<: *airflow-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  airflow_db_data:
+  warehouse_data:
+  anp_data:
+  airflow_logs:

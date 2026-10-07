@@ -1,0 +1,23 @@
+# Segredos
+.env
+
+# Dados baixados e gerados (podem ser recriados pelo pipeline)
+data/
+*.parquet
+*.csv
+*.zip
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Airflow / editores / sistema
+logs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
