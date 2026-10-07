@@ -1,6 +1,6 @@
 # ⛽ ANP Fuel ETL
 
-![CI](https://github.com/marcos_silva/anp-fuel-etl/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/MarcosH04/anp-fuel-etl/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![Airflow](https://img.shields.io/badge/airflow-2.10-017CEE)
 ![PostgreSQL](https://img.shields.io/badge/postgresql-16-336791)
@@ -54,7 +54,7 @@ Mapping* para criar uma tarefa por arquivo.
 Pré-requisitos: Docker (com Compose) e Git.
 
 ```bash
-git clone https://github.com/marcos_silva/anp-fuel-etl.git
+git clone https://github.com/MarcosH04/anp-fuel-etl.git
 cd anp-fuel-etl
 cp .env.example .env
 
